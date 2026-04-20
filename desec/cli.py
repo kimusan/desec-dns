@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 import typing as t
+import warnings
 from pprint import pprint
 
 import desec
@@ -139,6 +140,19 @@ def main() -> None:
 
     parser.add_argument(
         "--debug-http", action="store_true", help="Print details about http requests / responses."
+    )
+
+    parser.add_argument(
+        "--no-ssl-verify",
+        action="store_true",
+        default=False,
+        help="Disable SSL certificate verification. Use with caution.",
+    )
+
+    parser.add_argument(
+        "--config-file",
+        default=os.path.join(os.environ.get("XDG_CONFIG_HOME", "~/.config"), "desec", "config"),
+        help="Path to the config file (default: $XDG_CONFIG_HOME/desec/config)",
     )
     p = p_action.add_parser("list-tokens", help="list all authentication tokens")
 
@@ -600,15 +614,29 @@ def main() -> None:
     del p_action, g, p, parser
     configure_cli_logging(level=logging.DEBUG if arguments.debug_http else logging.INFO)
 
+    # Load config file if it exists
+    config_file_path = os.path.expanduser(arguments.config_file)
+    config = {}
+    if os.path.exists(config_file_path):
+        with open(config_file_path) as f:
+            config = json.load(f)
+
+    # CLI argument takes precedence over config file
+    no_ssl_verify = arguments.no_ssl_verify or config.get("no-ssl-verify", False)
+
+    # Suppress InsecureRequestWarning when SSL verification is disabled
+    if no_ssl_verify:
+        warnings.filterwarnings("ignore", message=".*Unverified HTTPS request.*")
+
     if arguments.token:
         token = arguments.token
     else:
         with open(os.path.expanduser(arguments.token_file)) as f:
             token = f.readline().strip()
     if arguments.block:
-        api_client = desec.api.APIClient(token)
+        api_client = desec.api.APIClient(token, verify=not no_ssl_verify)
     else:
-        api_client = desec.api.APIClient(token, retry_limit=0)
+        api_client = desec.api.APIClient(token, retry_limit=0, verify=not no_ssl_verify)
     del token
 
     try:

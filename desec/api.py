@@ -51,6 +51,8 @@ class APIClient:
             Set to 0 to disable.
         logger: Logger instance to send HTTP debug information to. Defaults to the named
             logger `desec.client`.
+        verify: Whether to verify SSL certificates. Set to `False` to disable SSL
+            verification (useful for testing with self-signed certificates).
 
     """
 
@@ -60,11 +62,13 @@ class APIClient:
         request_timeout: int | None = 15,
         retry_limit: int = 3,
         logger: logging.Logger = logging.getLogger("desec.client"),  # noqa: B008
+        verify: bool = True,
     ):
         self._token_auth = TokenAuth(token)
         self._request_timeout = request_timeout
         self._retry_limit = retry_limit
         self.logger = logger
+        self._verify = verify
         "Logger instance to send HTTP debug information to."
 
     @staticmethod
@@ -194,6 +198,7 @@ class APIClient:
                     params=params,
                     json=body,
                     timeout=self._request_timeout,
+                    verify=self._verify,
                 )
                 self.logger.debug(
                     f"Response: {r.status_code} for {method} {url}",
