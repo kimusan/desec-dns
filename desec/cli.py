@@ -609,6 +609,13 @@ def main() -> None:
             action="store_true",
             help="just parse zone data, but do not write it to the API",
         )
+    else:
+        p = p_action.add_parser("import-zone", help="import records from a zone file")
+        p.add_argument("domain", help="domain name")
+        p.add_argument("-f", "--file", required=True, help="target file name")
+        p.add_argument(
+            "--clear", action="store_true", help="remove all existing records before import"
+        )
 
     arguments = parser.parse_args()
     del p_action, g, p, parser
@@ -817,8 +824,17 @@ def main() -> None:
                 f.write(zone_result)
 
         elif arguments.action == "import":
-            with open(arguments.file) as f:
-                records = json.load(f)
+            try:
+                with open(arguments.file) as f:
+                    records = json.load(f)
+            except json.JSONDecodeError:
+                print(
+                    f"Error: '{arguments.file}' is not a valid JSON file. "
+                    "The 'import' command expects a JSON file exported with 'export'. "
+                    "For zone files, use 'import-zone' instead.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             # Create the domain if it does not exist.
             try:
                 api_client.domain_info(arguments.domain)
@@ -831,6 +847,26 @@ def main() -> None:
             print_rrsets(rrsets_result)
 
         elif arguments.action == "import-zone":
+            if not desec.utils.DNSPYTHON_AVAILABLE:
+                print(
+                    "Error: 'import-zone' requires the 'dnspython' package to be installed.\n"
+                    "Install it with: pip install dnspython\n"
+                    "Or if using pipx: pipx inject desec-dns dnspython",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            # Check if the file looks like JSON (common mistake)
+            with open(arguments.file) as f:
+                first_char = f.read(1).strip()
+            if first_char in ("{", "["):
+                print(
+                    f"Error: '{arguments.file}' appears to be a JSON file. "
+                    "The 'import-zone' command expects a zone file (BIND format). "
+                    "For JSON files, use 'import' instead.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
             record_list = desec.parse_zone_file(
                 arguments.file,
                 arguments.domain,
